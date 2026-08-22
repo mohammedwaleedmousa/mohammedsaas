@@ -1,0 +1,491 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../apps/api/src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db { provider = "postgresql" }
+
+enum MembershipStatus { INVITED ACTIVE SUSPENDED REMOVED }
+enum SubscriptionStatus { TRIAL ACTIVE PAST_DUE GRACE_PERIOD READ_ONLY SUSPENDED CANCELLED }
+enum BillingProvider { MANUAL STRIPE REGIONAL }
+enum InvoiceStatus { DRAFT ISSUED PARTIALLY_PAID PAID OVERDUE CANCELLED REFUNDED }
+enum PurchaseStatus { DRAFT ISSUED PARTIALLY_PAID PAID CANCELLED REFUNDED }
+enum JournalStatus { DRAFT POSTED REVERSED }
+enum AccountType { ASSET LIABILITY EQUITY REVENUE EXPENSE }
+enum InventoryDirection { IN OUT }
+enum InventoryMovementType { OPENING_BALANCE PURCHASE SALE SALE_RETURN PURCHASE_RETURN TRANSFER_IN TRANSFER_OUT ADJUSTMENT_IN ADJUSTMENT_OUT DAMAGE }
+enum PaymentMethod { CASH CARD BANK_TRANSFER OTHER }
+enum ShiftStatus { OPEN CLOSED }
+enum FeatureFlagScope { GLOBAL PLAN TENANT }
+
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  authUserId String @unique @map("auth_user_id") @db.Uuid
+  email String? @db.VarChar(320)
+  displayName String? @map("display_name") @db.VarChar(160)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  memberships Membership[]
+  auditLogs AuditLog[] @relation("AuditActor")
+  notifications Notification[]
+  @@map("users")
+}
+
+model Tenant {
+  id String @id @default(uuid()) @db.Uuid
+  slug String @unique @db.VarChar(80)
+  name String @db.VarChar(180)
+  industry String? @db.VarChar(120)
+  country String @db.VarChar(2)
+  baseCurrency String @map("base_currency") @db.VarChar(3)
+  timezone String @default("Asia/Aden") @db.VarChar(80)
+  language String @default("ar") @db.VarChar(8)
+  phone String? @db.VarChar(40)
+  email String? @db.VarChar(320)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  settings TenantSettings?
+  memberships Membership[]
+  invitations MembershipInvitation[]
+  branches Branch[]
+  roles Role[]
+  subscription Subscription?
+  customers Customer[]
+  suppliers Supplier[]
+  categories ProductCategory[]
+  products Product[]
+  warehouses Warehouse[]
+  inventoryMovements InventoryMovement[]
+  salesInvoices SalesInvoice[]
+  salesReturns SalesReturn[]
+  customerPayments CustomerPayment[]
+  purchaseBills PurchaseBill[]
+  supplierPayments SupplierPayment[]
+  expenses Expense[]
+  expenseCategories ExpenseCategory[]
+  accounts ChartAccount[]
+  journals JournalEntry[]
+  fiscalYears FiscalYear[]
+  cashierShifts CashierShift[]
+  posTransactions PosTransaction[]
+  notifications Notification[]
+  auditLogs AuditLog[]
+  sequences TenantSequence[]
+  flags TenantFeatureFlag[]
+  @@map("tenants")
+}
+
+model TenantSettings {
+  tenantId String @id @map("tenant_id") @db.Uuid
+  logoUrl String? @map("logo_url")
+  taxEnabled Boolean @default(false) @map("tax_enabled")
+  defaultTaxRate Decimal @default(0) @map("default_tax_rate") @db.Decimal(7,4)
+  fiscalYearStart Int @default(1) @map("fiscal_year_start")
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  @@map("tenant_settings")
+}
+
+model Membership {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  status MembershipStatus @default(ACTIVE)
+  invitedEmail String? @map("invited_email") @db.VarChar(320)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  roles MembershipRole[]
+  branches MembershipBranch[]
+  @@unique([tenantId,userId])
+  @@index([userId,status])
+  @@map("memberships")
+}
+
+model MembershipInvitation {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  email String @db.VarChar(320)
+  tokenHash String @unique @map("token_hash") @db.VarChar(64)
+  roleIds Json @map("role_ids")
+  branchIds Json @map("branch_ids")
+  invitedById String @map("invited_by_id") @db.Uuid
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  acceptedAt DateTime? @map("accepted_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  @@index([tenantId,email,expiresAt])
+  @@map("membership_invitations")
+}
+
+model Role {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  name String @db.VarChar(80)
+  isSystem Boolean @default(false) @map("is_system")
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  permissions RolePermission[]
+  memberships MembershipRole[]
+  @@unique([tenantId,name])
+  @@map("roles")
+}
+model Permission { id String @id @default(uuid()) @db.Uuid; key String @unique @db.VarChar(120); description String? @db.VarChar(240); roles RolePermission[]; @@map("permissions") }
+model RolePermission { roleId String @map("role_id") @db.Uuid; permissionId String @map("permission_id") @db.Uuid; role Role @relation(fields:[roleId],references:[id],onDelete:Cascade); permission Permission @relation(fields:[permissionId],references:[id],onDelete:Cascade); @@id([roleId,permissionId]); @@map("role_permissions") }
+model MembershipRole { membershipId String @map("membership_id") @db.Uuid; roleId String @map("role_id") @db.Uuid; membership Membership @relation(fields:[membershipId],references:[id],onDelete:Cascade); role Role @relation(fields:[roleId],references:[id],onDelete:Cascade); @@id([membershipId,roleId]); @@map("membership_roles") }
+model MembershipBranch { membershipId String @map("membership_id") @db.Uuid; branchId String @map("branch_id") @db.Uuid; membership Membership @relation(fields:[membershipId],references:[id],onDelete:Cascade); branch Branch @relation(fields:[branchId],references:[id],onDelete:Cascade); @@id([membershipId,branchId]); @@map("membership_branches") }
+
+model Branch {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  name String @db.VarChar(140)
+  code String @db.VarChar(30)
+  active Boolean @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  memberships MembershipBranch[]
+  warehouses Warehouse[]
+  inventoryMovements InventoryMovement[]
+  salesInvoices SalesInvoice[]
+  salesReturns SalesReturn[]
+  purchaseBills PurchaseBill[]
+  expenses Expense[]
+  cashierShifts CashierShift[]
+  posTransactions PosTransaction[]
+  @@unique([tenantId,code])
+  @@index([tenantId,active])
+  @@map("branches")
+}
+
+model SubscriptionPlan {
+  id String @id @default(uuid()) @db.Uuid
+  code String @unique @db.VarChar(40)
+  name String @db.VarChar(100)
+  monthlyPrice Decimal @map("monthly_price") @db.Decimal(20,4)
+  currency String @db.VarChar(3)
+  maxBranches Int? @map("max_branches")
+  maxUsers Int? @map("max_users")
+  active Boolean @default(true)
+  entitlements Json @default("{}")
+  subscriptions Subscription[]
+  @@map("subscription_plans")
+}
+model Subscription {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @unique @map("tenant_id") @db.Uuid
+  planId String @map("plan_id") @db.Uuid
+  status SubscriptionStatus @default(TRIAL)
+  provider BillingProvider @default(MANUAL)
+  trialEndsAt DateTime? @map("trial_ends_at") @db.Timestamptz(6)
+  currentPeriodEndsAt DateTime? @map("current_period_ends_at") @db.Timestamptz(6)
+  graceEndsAt DateTime? @map("grace_ends_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  plan SubscriptionPlan @relation(fields:[planId],references:[id])
+  events SubscriptionEvent[]
+  payments BillingPayment[]
+  @@index([status,currentPeriodEndsAt])
+  @@map("subscriptions")
+}
+model SubscriptionEvent { id String @id @default(uuid()) @db.Uuid; subscriptionId String @map("subscription_id") @db.Uuid; type String @db.VarChar(80); metadata Json @default("{}"); createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6); subscription Subscription @relation(fields:[subscriptionId],references:[id],onDelete:Cascade); @@index([subscriptionId,createdAt]); @@map("subscription_events") }
+model BillingPayment { id String @id @default(uuid()) @db.Uuid; subscriptionId String @map("subscription_id") @db.Uuid; provider BillingProvider; externalRef String? @map("external_ref") @db.VarChar(160); amount Decimal @db.Decimal(20,4); currency String @db.VarChar(3); receivedAt DateTime @map("received_at") @db.Timestamptz(6); metadata Json @default("{}"); subscription Subscription @relation(fields:[subscriptionId],references:[id],onDelete:Cascade); @@index([subscriptionId,receivedAt]); @@map("payments") }
+
+model Customer {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  name String @db.VarChar(180)
+  phone String? @db.VarChar(40)
+  email String? @db.VarChar(320)
+  taxNumber String? @map("tax_number") @db.VarChar(80)
+  address String?
+  creditLimit Decimal @default(0) @map("credit_limit") @db.Decimal(20,4)
+  active Boolean @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  invoices SalesInvoice[]
+  payments CustomerPayment[]
+  @@index([tenantId,name])
+  @@index([tenantId,phone])
+  @@map("customers")
+}
+model Supplier {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  name String @db.VarChar(180)
+  phone String? @db.VarChar(40)
+  email String? @db.VarChar(320)
+  taxNumber String? @map("tax_number") @db.VarChar(80)
+  address String?
+  active Boolean @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  bills PurchaseBill[]
+  payments SupplierPayment[]
+  @@index([tenantId,name])
+  @@map("suppliers")
+}
+model ProductCategory { id String @id @default(uuid()) @db.Uuid; tenantId String @map("tenant_id") @db.Uuid; name String @db.VarChar(120); active Boolean @default(true); tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade); products Product[]; @@unique([tenantId,name]); @@map("product_categories") }
+model Product {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  categoryId String? @map("category_id") @db.Uuid
+  sku String @db.VarChar(80)
+  barcode String? @db.VarChar(120)
+  name String @db.VarChar(180)
+  description String?
+  unit String @default("piece") @db.VarChar(40)
+  costPrice Decimal @map("cost_price") @db.Decimal(20,4)
+  sellingPrice Decimal @map("selling_price") @db.Decimal(20,4)
+  taxRate Decimal @default(0) @map("tax_rate") @db.Decimal(7,4)
+  trackInventory Boolean @default(true) @map("track_inventory")
+  minimumStock Decimal @default(0) @map("minimum_stock") @db.Decimal(20,4)
+  active Boolean @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  category ProductCategory? @relation(fields:[categoryId],references:[id],onDelete:SetNull)
+  inventoryMovements InventoryMovement[]
+  saleItems SalesInvoiceItem[]
+  purchaseItems PurchaseBillItem[]
+  @@unique([tenantId,sku])
+  @@unique([tenantId,barcode])
+  @@index([tenantId,name])
+  @@map("products")
+}
+model Warehouse {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  branchId String @map("branch_id") @db.Uuid
+  name String @db.VarChar(140)
+  code String @db.VarChar(30)
+  active Boolean @default(true)
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  branch Branch @relation(fields:[branchId],references:[id],onDelete:Restrict)
+  movements InventoryMovement[]
+  @@unique([tenantId,code])
+  @@index([tenantId,branchId])
+  @@map("warehouses")
+}
+model InventoryMovement {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  branchId String @map("branch_id") @db.Uuid
+  warehouseId String @map("warehouse_id") @db.Uuid
+  productId String @map("product_id") @db.Uuid
+  quantity Decimal @db.Decimal(20,4)
+  direction InventoryDirection
+  type InventoryMovementType
+  referenceType String? @map("reference_type") @db.VarChar(60)
+  referenceId String? @map("reference_id") @db.Uuid
+  reason String?
+  createdById String? @map("created_by_id") @db.Uuid
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  branch Branch @relation(fields:[branchId],references:[id],onDelete:Restrict)
+  warehouse Warehouse @relation(fields:[warehouseId],references:[id],onDelete:Restrict)
+  product Product @relation(fields:[productId],references:[id],onDelete:Restrict)
+  @@index([tenantId,warehouseId,productId,occurredAt])
+  @@index([tenantId,branchId,occurredAt])
+  @@map("inventory_movements")
+}
+
+model SalesInvoice {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  branchId String @map("branch_id") @db.Uuid
+  customerId String? @map("customer_id") @db.Uuid
+  number String @db.VarChar(40)
+  status InvoiceStatus @default(DRAFT)
+  currency String @db.VarChar(3)
+  subtotal Decimal @db.Decimal(20,4)
+  discountTotal Decimal @default(0) @map("discount_total") @db.Decimal(20,4)
+  taxTotal Decimal @default(0) @map("tax_total") @db.Decimal(20,4)
+  total Decimal @db.Decimal(20,4)
+  paidAmount Decimal @default(0) @map("paid_amount") @db.Decimal(20,4)
+  dueDate DateTime? @map("due_date") @db.Date
+  notes String?
+  idempotencyKey String? @map("idempotency_key") @db.VarChar(120)
+  postedAt DateTime? @map("posted_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdById String? @map("created_by_id") @db.Uuid
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  branch Branch @relation(fields:[branchId],references:[id],onDelete:Restrict)
+  customer Customer? @relation(fields:[customerId],references:[id],onDelete:Restrict)
+  items SalesInvoiceItem[]
+  payments CustomerPayment[]
+  posTransaction PosTransaction?
+  salesReturn SalesReturn?
+  @@unique([tenantId,number])
+  @@unique([tenantId,idempotencyKey])
+  @@index([tenantId,branchId,createdAt])
+  @@index([tenantId,customerId,status])
+  @@map("sales_invoices")
+}
+model SalesInvoiceItem {
+  id String @id @default(uuid()) @db.Uuid
+  invoiceId String @map("invoice_id") @db.Uuid
+  productId String @map("product_id") @db.Uuid
+  description String @db.VarChar(220)
+  quantity Decimal @db.Decimal(20,4)
+  unitPrice Decimal @map("unit_price") @db.Decimal(20,4)
+  unitCost Decimal @map("unit_cost") @db.Decimal(20,4)
+  discount Decimal @default(0) @db.Decimal(20,4)
+  tax Decimal @default(0) @db.Decimal(20,4)
+  lineTotal Decimal @map("line_total") @db.Decimal(20,4)
+  invoice SalesInvoice @relation(fields:[invoiceId],references:[id],onDelete:Cascade)
+  product Product @relation(fields:[productId],references:[id],onDelete:Restrict)
+  @@index([invoiceId])
+  @@map("sales_invoice_items")
+}
+model SalesReturn {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  branchId String @map("branch_id") @db.Uuid
+  invoiceId String @unique @map("invoice_id") @db.Uuid
+  shiftId String? @map("shift_id") @db.Uuid
+  amount Decimal @db.Decimal(20,4)
+  currency String @db.VarChar(3)
+  method PaymentMethod
+  reason String?
+  createdById String @map("created_by_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  branch Branch @relation(fields:[branchId],references:[id],onDelete:Restrict)
+  invoice SalesInvoice @relation(fields:[invoiceId],references:[id],onDelete:Restrict)
+  shift CashierShift? @relation(fields:[shiftId],references:[id],onDelete:Restrict)
+  @@index([tenantId,branchId,createdAt])
+  @@map("sales_returns")
+}
+model CustomerPayment {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  customerId String? @map("customer_id") @db.Uuid
+  invoiceId String? @map("invoice_id") @db.Uuid
+  amount Decimal @db.Decimal(20,4)
+  currency String @db.VarChar(3)
+  method PaymentMethod
+  accountCode String @map("account_code") @db.VarChar(20)
+  receivedAt DateTime @map("received_at") @db.Timestamptz(6)
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  customer Customer? @relation(fields:[customerId],references:[id],onDelete:Restrict)
+  invoice SalesInvoice? @relation(fields:[invoiceId],references:[id],onDelete:Restrict)
+  @@index([tenantId,customerId,receivedAt])
+  @@map("customer_payments")
+}
+
+model PurchaseBill {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  branchId String @map("branch_id") @db.Uuid
+  supplierId String @map("supplier_id") @db.Uuid
+  number String @db.VarChar(40)
+  status PurchaseStatus @default(DRAFT)
+  currency String @db.VarChar(3)
+  subtotal Decimal @db.Decimal(20,4)
+  taxTotal Decimal @default(0) @map("tax_total") @db.Decimal(20,4)
+  total Decimal @db.Decimal(20,4)
+  paidAmount Decimal @default(0) @map("paid_amount") @db.Decimal(20,4)
+  postedAt DateTime? @map("posted_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  branch Branch @relation(fields:[branchId],references:[id],onDelete:Restrict)
+  supplier Supplier @relation(fields:[supplierId],references:[id],onDelete:Restrict)
+  items PurchaseBillItem[]
+  payments SupplierPayment[]
+  @@unique([tenantId,number])
+  @@index([tenantId,branchId,createdAt])
+  @@map("purchase_bills")
+}
+model PurchaseBillItem { id String @id @default(uuid()) @db.Uuid; billId String @map("bill_id") @db.Uuid; productId String @map("product_id") @db.Uuid; description String @db.VarChar(220); quantity Decimal @db.Decimal(20,4); unitCost Decimal @map("unit_cost") @db.Decimal(20,4); tax Decimal @default(0) @db.Decimal(20,4); lineTotal Decimal @map("line_total") @db.Decimal(20,4); bill PurchaseBill @relation(fields:[billId],references:[id],onDelete:Cascade); product Product @relation(fields:[productId],references:[id],onDelete:Restrict); @@index([billId]); @@map("purchase_bill_items") }
+model SupplierPayment { id String @id @default(uuid()) @db.Uuid; tenantId String @map("tenant_id") @db.Uuid; supplierId String @map("supplier_id") @db.Uuid; billId String? @map("bill_id") @db.Uuid; amount Decimal @db.Decimal(20,4); currency String @db.VarChar(3); method PaymentMethod; accountCode String @map("account_code") @db.VarChar(20); paidAt DateTime @map("paid_at") @db.Timestamptz(6); tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade); supplier Supplier @relation(fields:[supplierId],references:[id],onDelete:Restrict); bill PurchaseBill? @relation(fields:[billId],references:[id],onDelete:Restrict); @@index([tenantId,supplierId,paidAt]); @@map("supplier_payments") }
+
+model ExpenseCategory { id String @id @default(uuid()) @db.Uuid; tenantId String @map("tenant_id") @db.Uuid; name String @db.VarChar(120); accountCode String @map("account_code") @db.VarChar(20); tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade); expenses Expense[]; @@unique([tenantId,name]); @@map("expense_categories") }
+model Expense {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  branchId String @map("branch_id") @db.Uuid
+  categoryId String @map("category_id") @db.Uuid
+  amount Decimal @db.Decimal(20,4)
+  tax Decimal @default(0) @db.Decimal(20,4)
+  currency String @db.VarChar(3)
+  paymentMethod PaymentMethod @map("payment_method")
+  accountCode String @map("account_code") @db.VarChar(20)
+  vendor String? @db.VarChar(180)
+  description String?
+  attachmentUrl String? @map("attachment_url")
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(6)
+  createdById String? @map("created_by_id") @db.Uuid
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  branch Branch @relation(fields:[branchId],references:[id],onDelete:Restrict)
+  category ExpenseCategory @relation(fields:[categoryId],references:[id],onDelete:Restrict)
+  @@index([tenantId,branchId,occurredAt])
+  @@map("expenses")
+}
+
+model ChartAccount {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  code String @db.VarChar(20)
+  nameAr String @map("name_ar") @db.VarChar(160)
+  nameEn String? @map("name_en") @db.VarChar(160)
+  type AccountType
+  parentId String? @map("parent_id") @db.Uuid
+  active Boolean @default(true)
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  parent ChartAccount? @relation("AccountTree",fields:[parentId],references:[id],onDelete:Restrict)
+  children ChartAccount[] @relation("AccountTree")
+  journalLines JournalLine[]
+  @@unique([tenantId,code])
+  @@index([tenantId,type])
+  @@map("chart_of_accounts")
+}
+model JournalEntry {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  number String @db.VarChar(40)
+  status JournalStatus @default(DRAFT)
+  entryDate DateTime @map("entry_date") @db.Date
+  currency String @db.VarChar(3)
+  description String @db.VarChar(260)
+  sourceType String? @map("source_type") @db.VarChar(60)
+  sourceId String? @map("source_id") @db.Uuid
+  reversedEntryId String? @map("reversed_entry_id") @db.Uuid
+  postedAt DateTime? @map("posted_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  lines JournalLine[]
+  @@unique([tenantId,number])
+  @@unique([tenantId,sourceType,sourceId])
+  @@index([tenantId,entryDate,status])
+  @@map("journal_entries")
+}
+model JournalLine { id String @id @default(uuid()) @db.Uuid; journalId String @map("journal_id") @db.Uuid; accountId String @map("account_id") @db.Uuid; debit Decimal @default(0) @db.Decimal(20,4); credit Decimal @default(0) @db.Decimal(20,4); memo String?; journal JournalEntry @relation(fields:[journalId],references:[id],onDelete:Cascade); account ChartAccount @relation(fields:[accountId],references:[id],onDelete:Restrict); @@index([journalId]); @@index([accountId]); @@map("journal_lines") }
+model FiscalYear { id String @id @default(uuid()) @db.Uuid; tenantId String @map("tenant_id") @db.Uuid; name String @db.VarChar(80); startsOn DateTime @map("starts_on") @db.Date; endsOn DateTime @map("ends_on") @db.Date; tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade); periods FiscalPeriod[]; @@unique([tenantId,name]); @@map("fiscal_years") }
+model FiscalPeriod { id String @id @default(uuid()) @db.Uuid; fiscalYearId String @map("fiscal_year_id") @db.Uuid; name String @db.VarChar(80); startsOn DateTime @map("starts_on") @db.Date; endsOn DateTime @map("ends_on") @db.Date; closed Boolean @default(false); closedAt DateTime? @map("closed_at") @db.Timestamptz(6); fiscalYear FiscalYear @relation(fields:[fiscalYearId],references:[id],onDelete:Cascade); @@unique([fiscalYearId,name]); @@map("fiscal_periods") }
+
+model CashierShift {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  branchId String @map("branch_id") @db.Uuid
+  openedById String @map("opened_by_id") @db.Uuid
+  closedById String? @map("closed_by_id") @db.Uuid
+  status ShiftStatus @default(OPEN)
+  openingCash Decimal @map("opening_cash") @db.Decimal(20,4)
+  expectedCash Decimal? @map("expected_cash") @db.Decimal(20,4)
+  countedCash Decimal? @map("counted_cash") @db.Decimal(20,4)
+  openedAt DateTime @default(now()) @map("opened_at") @db.Timestamptz(6)
+  closedAt DateTime? @map("closed_at") @db.Timestamptz(6)
+  tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
+  branch Branch @relation(fields:[branchId],references:[id],onDelete:Restrict)
+  transactions PosTransaction[]
+  returns SalesReturn[]
+  @@index([tenantId,branchId,status])
+  @@map("cashier_shifts")
+}
+model PosTransaction { id String @id @default(uuid()) @db.Uuid; tenantId String @map("tenant_id") @db.Uuid; branchId String @map("branch_id") @db.Uuid; shiftId String @map("shift_id") @db.Uuid; invoiceId String @unique @map("invoice_id") @db.Uuid; total Decimal @db.Decimal(20,4); method PaymentMethod; createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6); tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade); branch Branch @relation(fields:[branchId],references:[id],onDelete:Restrict); shift CashierShift @relation(fields:[shiftId],references:[id],onDelete:Restrict); invoice SalesInvoice @relation(fields:[invoiceId],references:[id],onDelete:Restrict); @@index([tenantId,shiftId,createdAt]); @@map("pos_transactions") }
+model Notification { id String @id @default(uuid()) @db.Uuid; tenantId String @map("tenant_id") @db.Uuid; userId String? @map("user_id") @db.Uuid; type String @db.VarChar(80); title String @db.VarChar(180); body String?; readAt DateTime? @map("read_at") @db.Timestamptz(6); createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6); tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade); user User? @relation(fields:[userId],references:[id],onDelete:Cascade); @@index([tenantId,userId,readAt,createdAt]); @@map("notifications") }
+model AuditLog { id String @id @default(uuid()) @db.Uuid; tenantId String? @map("tenant_id") @db.Uuid; actorId String? @map("actor_id") @db.Uuid; action String @db.VarChar(120); entityType String? @map("entity_type") @db.VarChar(80); entityId String? @map("entity_id") @db.Uuid; branchId String? @map("branch_id") @db.Uuid; metadata Json @default("{}"); ipHash String? @map("ip_hash") @db.VarChar(128); createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6); tenant Tenant? @relation(fields:[tenantId],references:[id],onDelete:SetNull); actor User? @relation("AuditActor",fields:[actorId],references:[id],onDelete:SetNull); @@index([tenantId,createdAt]); @@index([actorId,createdAt]); @@map("audit_logs") }
+model FeatureFlag { id String @id @default(uuid()) @db.Uuid; key String @unique @db.VarChar(100); description String?; enabled Boolean @default(false); scope FeatureFlagScope @default(GLOBAL); tenants TenantFeatureFlag[]; @@map("feature_flags") }
+model TenantFeatureFlag { tenantId String @map("tenant_id") @db.Uuid; flagId String @map("flag_id") @db.Uuid; enabled Boolean; tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade); flag FeatureFlag @relation(fields:[flagId],references:[id],onDelete:Cascade); @@id([tenantId,flagId]); @@map("tenant_feature_flags") }
+model TenantSequence { tenantId String @map("tenant_id") @db.Uuid; key String @db.VarChar(40); value BigInt @default(0); tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade); @@id([tenantId,key]); @@map("tenant_sequences") }

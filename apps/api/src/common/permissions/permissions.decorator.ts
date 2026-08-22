@@ -1,0 +1,1 @@
+import {SetMetadata} from '@nestjs/common';import type {Permission} from '@mohammedsaas/permissions';export const REQUIRED_PERMISSIONS=Symbol('required-permissions');export const RequirePermissions=(...p:Permission[])=>SetMetadata(REQUIRED_PERMISSIONS,p);

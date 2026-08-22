@@ -1,0 +1,1 @@
+import {describe,expect,it} from 'vitest';import {canUse,resolveEntitlements} from './entitlements.js';describe('entitlements',()=>{it('applies tenant override',()=>{const e=resolveEntitlements({multi_branch:false,advanced_reports:true},[{key:'multi_branch',enabled:true}]);expect(canUse(e,'multi_branch')).toBe(true);expect(canUse(e,'advanced_reports')).toBe(true);});});

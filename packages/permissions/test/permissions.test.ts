@@ -1,0 +1,2 @@
+import {describe,expect,it} from 'vitest'; import {DEFAULT_ROLE_PERMISSIONS,hasEveryPermission,PERMISSIONS} from '../src/index.js';
+describe('permission engine',()=>{it('owners have all permissions',()=>expect(hasEveryPermission(DEFAULT_ROLE_PERMISSIONS.OWNER??[],Object.values(PERMISSIONS))).toBe(true));it('cashiers cannot post journals',()=>expect((DEFAULT_ROLE_PERMISSIONS.CASHIER??[]).includes(PERMISSIONS.JOURNAL_POST)).toBe(false));});

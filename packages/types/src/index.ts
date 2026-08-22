@@ -1,0 +1,10 @@
+export const CURRENCIES = ['SAR','YER','USD','AED'] as const;
+export type CurrencyCode = (typeof CURRENCIES)[number] | (string & {});
+export const MEMBERSHIP_ROLES = ['OWNER','ADMIN','ACCOUNTANT','CASHIER','SALES','INVENTORY','PURCHASING','BRANCH_MANAGER'] as const;
+export type DefaultRoleName = (typeof MEMBERSHIP_ROLES)[number];
+export const SUBSCRIPTION_STATES = ['TRIAL','ACTIVE','PAST_DUE','GRACE_PERIOD','READ_ONLY','SUSPENDED','CANCELLED'] as const;
+export type SubscriptionState = (typeof SUBSCRIPTION_STATES)[number];
+export type Money = Readonly<{amount:string;currency:CurrencyCode}>;
+export type Paginated<T> = Readonly<{data:T[];page:number;pageSize:number;total:number}>;
+export type AuthenticatedPrincipal = Readonly<{userId:string;authUserId:string;email?:string}>;
+export type TenantContext = Readonly<{tenantId:string;tenantSlug:string;membershipId:string;userId:string;branchIds:string[];permissions:string[];subscriptionState:SubscriptionState}>;

@@ -1,0 +1,1 @@
+import {Module} from '@nestjs/common';import {PurchasesController} from './purchases.controller.js';import {PurchasesService} from './purchases.service.js';import {AccountingModule} from '../accounting/accounting.module.js';@Module({imports:[AccountingModule],controllers:[PurchasesController],providers:[PurchasesService],exports:[PurchasesService]})export class PurchasesModule{}
