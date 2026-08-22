@@ -1,6 +1,8 @@
 name: Bootstrap npm lockfile
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [feat/v1-foundation]
     paths:
@@ -10,7 +12,7 @@ on:
       - 'packages/*/package.json'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   lockfile:
@@ -19,24 +21,14 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mohammedsaas
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: feat/v1-foundation
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: package.json
       - name: Generate npm lockfile
         run: npm install --package-lock-only --ignore-scripts
-      - name: Commit lockfile when changed
-        shell: bash
-        run: |
-          if git diff --quiet -- package-lock.json && git ls-files --error-unmatch package-lock.json >/dev/null 2>&1; then
-            echo 'package-lock.json already current'
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add package-lock.json
-          git commit -m 'chore: add reproducible npm lockfile'
-          git push origin HEAD:feat/v1-foundation
+      - name: Upload lockfile artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-lockfile
+          path: package-lock.json
+          if-no-files-found: error
