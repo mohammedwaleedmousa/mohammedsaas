@@ -1,5 +1,6 @@
 -- Add line-level partial POS refunds and persisted cashier variance.
-DROP INDEX IF EXISTS sales_returns_invoice_id_key;
+-- The baseline defines sales_returns_invoice_id_key as a UNIQUE CONSTRAINT.
+-- Dropping the backing index directly is rejected by PostgreSQL, so remove the constraint itself.
 ALTER TABLE sales_returns DROP CONSTRAINT IF EXISTS sales_returns_invoice_id_key;
 ALTER TABLE sales_returns ADD COLUMN idempotency_key VARCHAR(120);
 CREATE UNIQUE INDEX sales_returns_tenant_id_idempotency_key_key ON sales_returns(tenant_id,idempotency_key);
