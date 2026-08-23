@@ -71,8 +71,7 @@ run('vertical transaction flows',()=>{
     const sale=await sales.completePosSale(context,{branchId:context.branchIds[0]!,warehouseId,shiftId:shift.id,paymentMethod:'CASH',idempotencyKey:`sale-${crypto.randomUUID()}`,items:[{productId,quantity:'3.0000',discount:'5.0000'}]});
     const invoiceLine=sale.invoice.items[0]!;
 
-    const afterSale=await inventory.stock(context,warehouseId);
-    expectAmount(afterSale.find(row=>row.productId===productId)!.quantity,'7.0000');
+    expectAmount((await inventory.stock(context,warehouseId)).find(row=>row.productId===productId)!.quantity,'7.0000');
 
     const saleJournal=await prisma.forTenant(context.tenantId,tx=>tx.journalEntry.findFirstOrThrow({where:{tenantId:context.tenantId,sourceType:'POS_SALE',sourceId:sale.invoice.id},include:{lines:true}}));
     expect(saleJournal.status).toBe('POSTED');
@@ -83,6 +82,7 @@ run('vertical transaction flows',()=>{
 
     const firstRefundJournal=await prisma.forTenant(context.tenantId,tx=>tx.journalEntry.findFirstOrThrow({where:{tenantId:context.tenantId,sourceType:'POS_REFUND',sourceId:firstRefund.salesReturn.id},include:{lines:true}}));
     expect(firstRefundJournal.status).toBe('POSTED');
+    expect(firstRefundJournal.id).not.toBe(saleJournal.id);
     expectBalanced(firstRefundJournal.lines);
     expect((await prisma.forTenant(context.tenantId,tx=>tx.journalEntry.findUniqueOrThrow({where:{id:saleJournal.id}}))).status).toBe('POSTED');
 
@@ -94,6 +94,8 @@ run('vertical transaction flows',()=>{
 
     const finalRefundJournal=await prisma.forTenant(context.tenantId,tx=>tx.journalEntry.findFirstOrThrow({where:{tenantId:context.tenantId,sourceType:'POS_REFUND',sourceId:finalRefund.salesReturn.id},include:{lines:true}}));
     expect(finalRefundJournal.status).toBe('POSTED');
+    expect(finalRefundJournal.id).not.toBe(saleJournal.id);
+    expect(finalRefundJournal.id).not.toBe(firstRefundJournal.id);
     expectBalanced(finalRefundJournal.lines);
 
     const financialState=await prisma.forTenant(context.tenantId,async tx=>({
