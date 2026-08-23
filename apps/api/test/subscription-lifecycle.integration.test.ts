@@ -71,7 +71,7 @@ run('subscription lifecycle acceptance',()=>{
       await tx.fiscalPeriod.create({data:{fiscalYearId:fiscalYear.id,name:'2026',startsOn:new Date('2026-01-01'),endsOn:new Date('2026-12-31')}});
       await tx.chartAccount.create({data:{tenantId,code:'1100',nameAr:'Cash',type:'ASSET'}});
       await tx.chartAccount.create({data:{tenantId,code:'4100',nameAr:'Sales',type:'REVENUE'}});
-      baseContext={tenantId,tenantSlug:tenant.slug,membershipId:crypto.randomUUID(),userId:actorId,branchIds:[branch.id],permissions:['reports.financial','customers.create'],};
+      baseContext={tenantId,tenantSlug:tenant.slug,membershipId:crypto.randomUUID(),userId:actorId,branchIds:[branch.id],permissions:['reports.financial','customers.create']};
     });
 
     await prisma.forTenant(tenantId,tx=>accounting.postJournal(tx,{tenantId,sourceType:'LIFECYCLE_BASELINE',sourceId:crypto.randomUUID(),entryDate:new Date('2026-08-23'),draft:{description:'Lifecycle baseline',currency:'SAR',lines:[{accountCode:'1100',debit:'100.0000',credit:'0.0000'},{accountCode:'4100',debit:'0.0000',credit:'100.0000'}]}}));
@@ -111,7 +111,8 @@ run('subscription lifecycle acceptance',()=>{
     expect(units(reportDuringReadOnly.netProfit)).toBe(units('100.0000'));
     expect(await snapshotFinancials()).toBe(financialFingerprint);
 
-    await platform.subscriptionAction(actorId,tenantId,{action:'EXTEND',days:30});
+    const renewalReference=`renewal-${crypto.randomUUID()}`;
+    await platform.subscriptionAction(actorId,tenantId,{action:'MARK_PAYMENT',amount:'25.0000',currency:'SAR',externalRef:renewalReference});
     expect(await status()).toBe('ACTIVE');
     const renewed=contextFor('ACTIVE');
     expect(writeGuard.canActivate(httpContext('POST',renewed))).toBe(true);
@@ -123,18 +124,22 @@ run('subscription lifecycle acceptance',()=>{
     expect(units(reportAfterRenewal.totalRevenue)).toBe(units(reportDuringReadOnly.totalRevenue));
     expect(units(reportAfterRenewal.netProfit)).toBe(units(reportDuringReadOnly.netProfit));
 
+    const payment=await prisma.billingPayment.findFirstOrThrow({where:{subscriptionId,externalRef:renewalReference}});
+    expect(units(payment.amount)).toBe(units('25.0000'));
+    expect(payment.currency).toBe('SAR');
+
     const audit=await prisma.forTenant(tenantId,tx=>tx.auditLog.findMany({where:{tenantId,entityType:'subscription',entityId:subscriptionId},orderBy:{createdAt:'asc'}}));
     expect(audit.map(entry=>entry.action)).toEqual([
       'platform_subscription_activate',
       'platform_subscription_set_status',
       'platform_subscription_set_status',
       'platform_subscription_set_status',
-      'platform_subscription_extend'
+      'platform_subscription_mark_payment'
     ]);
     expect(audit).toHaveLength(5);
 
     const events=await prisma.subscriptionEvent.findMany({where:{subscriptionId},orderBy:{createdAt:'asc'}});
-    expect(events.map(event=>event.type)).toEqual(['ACTIVATE','SET_STATUS','SET_STATUS','SET_STATUS','EXTEND']);
+    expect(events.map(event=>event.type)).toEqual(['ACTIVATE','SET_STATUS','SET_STATUS','SET_STATUS','MARK_PAYMENT']);
     expect(events).toHaveLength(audit.length);
   });
 });
