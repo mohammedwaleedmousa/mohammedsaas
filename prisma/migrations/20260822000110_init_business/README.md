@@ -1,0 +1,1 @@
+This migration segment creates V1 business tables before integrity constraints are applied.
