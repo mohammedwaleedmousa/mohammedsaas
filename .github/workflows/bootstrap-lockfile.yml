@@ -16,10 +16,14 @@ permissions:
 
 jobs:
   lockfile:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mohammedsaas
     steps:
+      - name: Runner diagnostics
+        run: |
+          node --version
+          npm --version
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
