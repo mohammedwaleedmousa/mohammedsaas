@@ -248,6 +248,7 @@ model Product {
   inventoryMovements InventoryMovement[]
   saleItems SalesInvoiceItem[]
   purchaseItems PurchaseBillItem[]
+  returnItems SalesReturnItem[]
   @@unique([tenantId,sku])
   @@unique([tenantId,barcode])
   @@index([tenantId,name])
@@ -315,7 +316,7 @@ model SalesInvoice {
   items SalesInvoiceItem[]
   payments CustomerPayment[]
   posTransaction PosTransaction?
-  salesReturn SalesReturn?
+  salesReturns SalesReturn[]
   @@unique([tenantId,number])
   @@unique([tenantId,idempotencyKey])
   @@index([tenantId,branchId,createdAt])
@@ -335,6 +336,7 @@ model SalesInvoiceItem {
   lineTotal Decimal @map("line_total") @db.Decimal(20,4)
   invoice SalesInvoice @relation(fields:[invoiceId],references:[id],onDelete:Cascade)
   product Product @relation(fields:[productId],references:[id],onDelete:Restrict)
+  returnItems SalesReturnItem[]
   @@index([invoiceId])
   @@map("sales_invoice_items")
 }
@@ -342,20 +344,41 @@ model SalesReturn {
   id String @id @default(uuid()) @db.Uuid
   tenantId String @map("tenant_id") @db.Uuid
   branchId String @map("branch_id") @db.Uuid
-  invoiceId String @unique @map("invoice_id") @db.Uuid
+  invoiceId String @map("invoice_id") @db.Uuid
   shiftId String? @map("shift_id") @db.Uuid
   amount Decimal @db.Decimal(20,4)
   currency String @db.VarChar(3)
   method PaymentMethod
   reason String?
+  idempotencyKey String? @map("idempotency_key") @db.VarChar(120)
   createdById String @map("created_by_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
   branch Branch @relation(fields:[branchId],references:[id],onDelete:Restrict)
   invoice SalesInvoice @relation(fields:[invoiceId],references:[id],onDelete:Restrict)
   shift CashierShift? @relation(fields:[shiftId],references:[id],onDelete:Restrict)
+  items SalesReturnItem[]
+  @@unique([tenantId,idempotencyKey])
+  @@index([tenantId,invoiceId,createdAt])
   @@index([tenantId,branchId,createdAt])
   @@map("sales_returns")
+}
+model SalesReturnItem {
+  id String @id @default(uuid()) @db.Uuid
+  returnId String @map("return_id") @db.Uuid
+  invoiceItemId String @map("invoice_item_id") @db.Uuid
+  productId String @map("product_id") @db.Uuid
+  quantity Decimal @db.Decimal(20,4)
+  netAmount Decimal @map("net_amount") @db.Decimal(20,4)
+  taxAmount Decimal @map("tax_amount") @db.Decimal(20,4)
+  costAmount Decimal @map("cost_amount") @db.Decimal(20,4)
+  totalAmount Decimal @map("total_amount") @db.Decimal(20,4)
+  salesReturn SalesReturn @relation(fields:[returnId],references:[id],onDelete:Cascade)
+  invoiceItem SalesInvoiceItem @relation(fields:[invoiceItemId],references:[id],onDelete:Restrict)
+  product Product @relation(fields:[productId],references:[id],onDelete:Restrict)
+  @@index([returnId])
+  @@index([invoiceItemId])
+  @@map("sales_return_items")
 }
 model CustomerPayment {
   id String @id @default(uuid()) @db.Uuid
@@ -474,6 +497,7 @@ model CashierShift {
   openingCash Decimal @map("opening_cash") @db.Decimal(20,4)
   expectedCash Decimal? @map("expected_cash") @db.Decimal(20,4)
   countedCash Decimal? @map("counted_cash") @db.Decimal(20,4)
+  cashVariance Decimal? @map("cash_variance") @db.Decimal(20,4)
   openedAt DateTime @default(now()) @map("opened_at") @db.Timestamptz(6)
   closedAt DateTime? @map("closed_at") @db.Timestamptz(6)
   tenant Tenant @relation(fields:[tenantId],references:[id],onDelete:Cascade)
