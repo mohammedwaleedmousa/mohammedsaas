@@ -1,0 +1,21 @@
+name: Hosted runner diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/v1-foundation]
+    paths:
+      - '.github/workflows/runner-diagnostic.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  runner:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prove runner shell starts
+        run: |
+          echo "hosted runner started"
+          node --version
