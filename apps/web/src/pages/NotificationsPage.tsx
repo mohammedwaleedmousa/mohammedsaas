@@ -1,3 +1,14 @@
-import{useMutation,useQuery,useQueryClient}from'@tanstack/react-query';import{useParams}from'react-router-dom';import{api}from'../lib/api.js';
-type N={id:string;title:string;message:string;readAt?:string;createdAt:string};
-export function NotificationsPage(){const{workspaceSlug=''}=useParams(),qc=useQueryClient();const q=useQuery({queryKey:['notifications',workspaceSlug],queryFn:()=>api<N[]>(`/workspaces/${workspaceSlug}/notifications`)});const read=useMutation({mutationFn:(id:string)=>api(`/workspaces/${workspaceSlug}/notifications/${id}/read`,{method:'POST'}),onSuccess:async()=>qc.invalidateQueries({queryKey:['notifications',workspaceSlug]})});return <><div className="page-header"><div><h1>الإشعارات</h1><p>تنبيهات العمل المهمة.</p></div></div><div className="card-list">{q.data?.map(n=><button className={`notification ${n.readAt?'read':''}`} key={n.id} onClick={()=>read.mutate(n.id)}><strong>{n.title}</strong><span>{n.message}</span><small>{new Date(n.createdAt).toLocaleString('ar')}</small></button>)}</div></>}
+import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query';
+import type {NotificationDto} from '@mohammedsaas/types';
+import {useParams} from 'react-router-dom';
+import {api} from '../lib/api.js';
+
+export function NotificationsPage(){
+  const{workspaceSlug=''}=useParams(),queryClient=useQueryClient();
+  const notifications=useQuery({queryKey:['notifications',workspaceSlug],queryFn:()=>api<NotificationDto[]>(`/workspaces/${workspaceSlug}/notifications`)});
+  const markRead=useMutation({mutationFn:(id:string)=>api<NotificationDto>(`/workspaces/${workspaceSlug}/notifications/${id}/read`,{method:'POST'}),onSuccess:async()=>queryClient.invalidateQueries({queryKey:['notifications',workspaceSlug]})});
+  return <>
+    <div className="page-header"><div><h1>الإشعارات</h1><p>تنبيهات العمل المهمة.</p></div></div>
+    <div className="card-list">{notifications.data?.map(notification=><button className={`notification ${notification.readAt?'read':''}`} key={notification.id} onClick={()=>markRead.mutate(notification.id)}><strong>{notification.title}</strong>{notification.message&&<span>{notification.message}</span>}<small>{new Date(notification.createdAt).toLocaleString('ar')}</small></button>)}</div>
+  </>;
+}
