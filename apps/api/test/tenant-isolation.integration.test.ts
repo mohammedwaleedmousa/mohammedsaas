@@ -89,6 +89,17 @@ run('PostgreSQL tenant RLS',()=>{
     }
   }
 
+  async function expectDenied(client:PoolClient,sql:string,params:unknown[]=[]){
+    const savepoint=`rls_denied_${randomUUID().replaceAll('-','')}`;
+    await client.query(`SAVEPOINT ${savepoint}`);
+    try{
+      await expect(client.query(sql,params)).rejects.toMatchObject({code:'42501'});
+    }finally{
+      await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+      await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+    }
+  }
+
   beforeAll(async()=>{
     if(!process.env.DATABASE_URL)throw new Error('DATABASE_URL is required for RLS integration tests');
     prisma=new PrismaService();
@@ -178,18 +189,19 @@ run('PostgreSQL tenant RLS',()=>{
         expect(read.rowCount).toBe(0);
       }
 
-      await expect(client.query('INSERT INTO customers(id,tenant_id,name,credit_limit,active,created_at) VALUES($1,$2,$3,0,true,now())',[randomUUID(),tenantB.context.tenantId,'Forbidden Customer'])).rejects.toMatchObject({code:'42501'});
-
       const productUpdate=await client.query('UPDATE products SET name=$1 WHERE id=$2 RETURNING id',['tampered',tenantB.productId]);
       expect(productUpdate.rowCount).toBe(0);
       const invoiceUpdate=await client.query('UPDATE sales_invoices SET notes=$1 WHERE id=$2 RETURNING id',['tampered',tenantB.invoiceId]);
       expect(invoiceUpdate.rowCount).toBe(0);
       const posUpdate=await client.query('UPDATE pos_transactions SET total=0 WHERE id=$1 RETURNING id',[tenantB.posTransactionId]);
       expect(posUpdate.rowCount).toBe(0);
+      const warehouseUpdate=await client.query('UPDATE warehouses SET name=$1 WHERE id=$2 RETURNING id',['tampered',tenantB.warehouseId]);
+      expect(warehouseUpdate.rowCount).toBe(0);
       const journalUpdate=await client.query('UPDATE journal_entries SET description=$1 WHERE id=$2 RETURNING id',['tampered',tenantB.journalEntryId]);
       expect(journalUpdate.rowCount).toBe(0);
 
-      await expect(client.query("INSERT INTO inventory_movements(id,tenant_id,branch_id,warehouse_id,product_id,quantity,direction,type,occurred_at) VALUES($1,$2,$3,$4,$5,1,'IN','ADJUSTMENT_IN',now())",[randomUUID(),tenantB.context.tenantId,tenantB.context.branchIds[0]!,tenantB.warehouseId,tenantB.productId])).rejects.toMatchObject({code:'42501'});
+      await expectDenied(client,'INSERT INTO customers(id,tenant_id,name,credit_limit,active,created_at) VALUES($1,$2,$3,0,true,now())',[randomUUID(),tenantB.context.tenantId,'Forbidden Customer']);
+      await expectDenied(client,"INSERT INTO inventory_movements(id,tenant_id,branch_id,warehouse_id,product_id,quantity,direction,type,occurred_at) VALUES($1,$2,$3,$4,$5,1,'IN','ADJUSTMENT_IN',now())",[randomUUID(),tenantB.context.tenantId,tenantB.context.branchIds[0]!,tenantB.warehouseId,tenantB.productId]);
     });
   });
 
