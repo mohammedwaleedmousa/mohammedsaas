@@ -130,7 +130,7 @@ export type PosSaleLookupDto=Readonly<{
 
 export type PosSaleReceiptDto=Readonly<{
   invoice:Readonly<{id:string;number:string;total:string;currency:string}>;
-  payment:Readonly<{id?:string;amount:string}>|null;
+  payment?:Readonly<{id?:string;amount:string}>|null;
   idempotentReplay:boolean;
 }>;
 
