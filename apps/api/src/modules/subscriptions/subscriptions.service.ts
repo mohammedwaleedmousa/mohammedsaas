@@ -1,1 +1,29 @@
-import {Injectable,NotFoundException} from '@nestjs/common';import {PrismaService} from '../../infra/prisma/prisma.service.js';import {resolveEntitlements} from './entitlements.js';@Injectable()export class SubscriptionsService{constructor(private readonly p:PrismaService){}async get(t:string){const s=await this.p.subscription.findUnique({where:{tenantId:t},include:{plan:true}});if(!s)throw new NotFoundException();const overrides=await this.p.tenantFeatureFlag.findMany({where:{tenantId:t},include:{flag:true}});return{id:s.id,status:s.status,trialEndsAt:s.trialEndsAt,currentPeriodEndsAt:s.currentPeriodEndsAt,plan:{code:s.plan.code,name:s.plan.name,monthlyPrice:s.plan.monthlyPrice.toString(),currency:s.plan.currency},entitlements:resolveEntitlements(s.plan.entitlements,overrides.map(o=>({key:o.flag.key,enabled:o.enabled})))};}async can(t:string,k:string){return(await this.get(t)).entitlements[k]===true;}}
+import {Injectable,NotFoundException} from '@nestjs/common';
+import {PrismaService} from '../../infra/prisma/prisma.service.js';
+import {resolveEntitlements} from './entitlements.js';
+
+@Injectable()
+export class SubscriptionsService{
+  constructor(private readonly prisma:PrismaService){}
+  async get(tenantId:string){
+    return this.prisma.forTenant(tenantId,async tx=>{
+      const subscription=await tx.subscription.findUnique({where:{tenantId},include:{plan:true}});
+      if(!subscription)throw new NotFoundException();
+      const overrides=await tx.tenantFeatureFlag.findMany({where:{tenantId},include:{flag:true}});
+      return{
+        id:subscription.id,
+        status:subscription.status,
+        trialEndsAt:subscription.trialEndsAt,
+        currentPeriodEndsAt:subscription.currentPeriodEndsAt,
+        plan:{
+          code:subscription.plan.code,
+          name:subscription.plan.name,
+          monthlyPrice:subscription.plan.monthlyPrice.toString(),
+          currency:subscription.plan.currency
+        },
+        entitlements:resolveEntitlements(subscription.plan.entitlements,overrides.map(override=>({key:override.flag.key,enabled:override.enabled})))
+      };
+    });
+  }
+  async can(tenantId:string,key:string){return(await this.get(tenantId)).entitlements[key]===true;}
+}
