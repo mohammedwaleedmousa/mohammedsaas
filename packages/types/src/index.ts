@@ -9,6 +9,44 @@ export type Paginated<T>=Readonly<{data:T[];page:number;pageSize:number;total:nu
 export type AuthenticatedPrincipal=Readonly<{userId:string;authUserId:string;email?:string}>;
 export type TenantContext=Readonly<{tenantId:string;tenantSlug:string;membershipId:string;userId:string;branchIds:string[];permissions:string[];subscriptionState:SubscriptionState}>;
 
+export type WorkspaceSummaryDto=Readonly<{
+  id:string;
+  tenant:Readonly<{
+    id:string;
+    slug:string;
+    name:string;
+    baseCurrency:string;
+    timezone:string;
+    subscription:Readonly<{status:SubscriptionState;trialEndsAt:string|null;plan:Readonly<{code:string;name:string}>}>|null;
+  }>;
+  roles:ReadonlyArray<Readonly<{role:Readonly<{name:string}>}>>;
+}>;
+
+export type WorkspaceContextDto=Readonly<{
+  tenant:Readonly<{id:string;slug:string;name:string;baseCurrency:string;timezone:string;language:string}>;
+  branches:ReadonlyArray<Readonly<{id:string;name:string;code:string;warehouses:ReadonlyArray<Readonly<{id:string;name:string;code:string}>>}>>;
+  permissions:readonly string[];
+  subscriptionState:SubscriptionState;
+}>;
+
+export type ProductDto=Readonly<{
+  id:string;
+  sku:string;
+  barcode:string|null;
+  name:string;
+  sellingPrice:string;
+  costPrice:string;
+  taxRate:string;
+  trackInventory:boolean;
+}>;
+
+export type CustomerDto=Readonly<{
+  id:string;
+  name:string;
+  phone:string|null;
+  email:string|null;
+}>;
+
 export type PlatformOverviewDto=Readonly<{
   totalCompanies:number;
   activeCompanies:number;
@@ -25,6 +63,29 @@ export type NotificationDto=Readonly<{
   message:string|null;
   readAt:string|null;
   createdAt:string;
+}>;
+
+export type ProfitLossDto=Readonly<{
+  revenue:ReadonlyArray<Readonly<{code:string;name:string;amount:string}>>;
+  expenses:ReadonlyArray<Readonly<{code:string;name:string;amount:string}>>;
+  totalRevenue:string;
+  totalExpenses:string;
+  netProfit:string;
+}>;
+
+export type BalanceSheetAccountDto=Readonly<{
+  id:string;
+  code:string;
+  nameAr:string;
+  nameEn:string|null;
+  type:'ASSET'|'LIABILITY'|'EQUITY'|'REVENUE'|'EXPENSE';
+  amount:string;
+}>;
+
+export type BalanceSheetDto=Readonly<{
+  assets:ReadonlyArray<BalanceSheetAccountDto>;
+  liabilities:ReadonlyArray<BalanceSheetAccountDto>;
+  equity:ReadonlyArray<BalanceSheetAccountDto>;
 }>;
 
 export type PosShiftSummaryDto=Readonly<{
@@ -65,4 +126,15 @@ export type PosSaleLookupDto=Readonly<{
   customer:Readonly<{id:string;name:string}>|null;
   paymentMethod:'CASH'|'CARD'|'BANK_TRANSFER'|'OTHER';
   lines:ReadonlyArray<PosRefundableLineDto>;
+}>;
+
+export type PosSaleReceiptDto=Readonly<{
+  invoice:Readonly<{id:string;number:string;total:string;currency:string}>;
+  payment:Readonly<{id?:string;amount:string}>|null;
+  idempotentReplay:boolean;
+}>;
+
+export type PosRefundResultDto=Readonly<{
+  salesReturn:Readonly<{id:string;amount:string}>;
+  idempotentReplay:boolean;
 }>;
