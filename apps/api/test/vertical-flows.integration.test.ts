@@ -106,7 +106,7 @@ run('vertical transaction flows',()=>{
     expect(financialState.refunds).toHaveLength(2);
     expectAmount(financialState.refunds[0]!.amount,'113.0833');
     expectAmount(financialState.refunds[1]!.amount,'226.1667');
-    expectAmount(financialState.refunds.reduce((sum,refund)=>(units(sum)+units(refund.amount)).toString(),'0'),'339.2500');
+    expect(financialState.refunds.reduce((sum,refund)=>sum+units(refund.amount),0n)).toBe(units('339.2500'));
 
     const beforeClose=await sales.shiftSummary(context,shift.id);
     expectAmount(beforeClose.openingCash,'50.0000');
