@@ -1,0 +1,1 @@
+import type {Request} from 'express';import type {AuthenticatedPrincipal,TenantContext} from '@mohammedsaas/types';export type AuthenticatedRequest=Request&{principal?:AuthenticatedPrincipal;tenantContext?:TenantContext};
